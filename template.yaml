@@ -1,61 +1,29 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: >-
-  renew-API-KEY-AppSync
-
 Transform: "AWS::Serverless-2016-10-31"
+Description: Automatically renew AppSync API key
 
 Resources:
 
-  LambdaRoleAppSyncKey:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub ${AWS::StackName}-lambda-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action: 'sts:AssumeRole'
-            Principal:
-              Service: lambda.amazonaws.com
-
-      Policies:
-        - PolicyName: WriteCloudWatchLogs
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - logs:CreateLogGroup
-                Resource: '*'
-        
-        - PolicyName: GetApiKeyAppSync
-          PolicyDocument:
-              Version: 2012-10-17
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - appsync:ListGraphqlApis
-                    - appsync:GetGraphqlApi
-                    - appsync:ListApiKeys
-                    - appsync:UpdateApiKey
-                  Resource: '*'
-          
   RenewApiKeyAppSync:
     Type: AWS::Serverless::Function
     Properties:
-      Description: A Lambda in charge of renewing the API KEY of all AppSync.
-      Runtime: nodejs16.x
-      Architectures:
-        - x86_64
-      Handler: handlers/index.handler
-      Role: !GetAtt LambdaRoleAppSyncKey.Arn
-
+      Description: Lambda in charge of renewing the API KEY of all AppSync.
+      Runtime: nodejs20.x
+      Handler: index.handler
+      CodeUri: handlers
+      Timeout: 100
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - appsync:ListGraphqlApis
+                - appsync:GetGraphqlApi
+                - appsync:ListApiKeys
+                - appsync:UpdateApiKey
+              Resource: '*'
       Events:
         CloudWatchEvent:
           Type: Schedule
           Properties:
             Schedule: "rate(300 days)"
-      MemorySize: 128
-      Timeout: 100
+      
