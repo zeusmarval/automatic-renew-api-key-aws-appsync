@@ -1,20 +1,95 @@
-# Index
-- [Introducction](#renew-API-KEY-AppSync)
-- [References](#References)
+# Automatically Renew AppSync API Key
 
-# renew-API-KEY-AppSync  
+This repository contains an AWS CloudFormation template to set up a serverless application for automatically renewing AppSync API keys using AWS Lambda and other AWS services.
 
-This project contains source code and supporting files for a serverless application that you can deploy with the AWS Serverless Application Model (AWS SAM) command line interface (CLI). It includes the following files and folders:
+## Table of Contents
 
--  `handlers` - Code for the application's Lambda function.
+- [Overview](#overview)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Deployment](#deployment)
+- [Usage](#usage)
+  - [Schedule](#schedule)
+  - [Lambda Function](#lambda-function)
+  - [IAM Policies](#iam-policies)
+- [Clean Up](#clean-up)
+- [References](#references)
 
--  `events` - Invocation events that you can use to invoke the function.
+## Overview
 
--  `template.yaml` - A template that defines the application's AWS resources.
+The template provisions the following AWS resources:
 
-This scheduled task is responsible for periodically updating `(every 300 days)` all `(25)` AppSync Api Keys for a period of one year from the moment it is executed.
+- **AWS Lambda**: A function to renew AppSync API keys.
+- **AWS Eventbridge Events**: Triggers the Lambda function periodically.
 
-# References
+## Features
+
+- **Automated API Key Renewal**: Periodically renews all AppSync API keys.
+- **Scheduled Execution**: Runs the renewal process every 300 days.
+- **Scalability**: Designed to handle up to 25 AppSync API keys.
+
+## Prerequisites
+
+- An AWS account.
+- AWS CLI configured with appropriate permissions.
+- Node.js installed for Lambda function development.
+
+## Deployment
+
+1. **Clone the repository:**
+
+    ```sh
+    git clone https://github.com/zeusmarval/Automatic-Renew-API-KEY-AppSync
+    cd renew-appsync-api-key
+    ```
+
+2. **Package the stack:**
+
+    ```sh
+    sam build --use-container
+    ```
+
+3. **Deploy the CloudFormation stack:**
+
+    ```sh
+    aws cloudformation deploy \
+        --template-file template.yaml \
+        --stack-name RenewAppSyncApiKey \
+        --capabilities CAPABILITY_NAMED_IAM
+    ```
+
+## Usage
+
+### Schedule
+
+The Lambda function is triggered by a Events rule that runs every 300 days.
+
+### Lambda Function
+
+- **Handler**: The entry point for the Lambda function is defined in the `index.handler` file located in the `handlers` directory.
+- **Runtime**: Node.js 20.x is used as the runtime environment.
+
+### IAM Policies
+
+The Lambda function has the following permissions:
+
+- **Actions**:
+  - `appsync:ListGraphqlApis`
+  - `appsync:GetGraphqlApi`
+  - `appsync:ListApiKeys`
+  - `appsync:UpdateApiKey`
+- **Resource**: `*`
+
+
+## Clean Up
+
+To delete the CloudFormation stack and all resources created:
+
+```sh
+aws cloudformation delete-stack --stack-name RenewAppSyncApiKey
+```
+
+## References
 
 - Building lambdas with infrastructure as code: [Serverless Application Model (SAM) - Lambda](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-getting-started-hello-world.html)
 - Create scheduled events: [Schedule - AWS Serverless Application Model](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-property-function-schedule.html)
