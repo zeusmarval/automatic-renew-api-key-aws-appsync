@@ -37,9 +37,11 @@ Resources:
                 - appsync:UpdateApiKey
               Resource: '*'
       Events:
-        CloudWatchEvent:
+        RenewalSchedule:
           Type: Schedule
           Properties:
+            Name: !Sub ${AWS::StackName}-renewal-schedule
+            Description: COMMON SERVICES - RENEW APPSYNC API KEY | Scheduled event to trigger automatic renewal of AppSync API keys every 300 days
             Schedule: "rate(300 days)"
 
   RenewAppSyncApiKeyLogGroup:
