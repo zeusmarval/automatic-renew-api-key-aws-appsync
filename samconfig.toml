@@ -1,0 +1,19 @@
+version = 0.1
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy.parameters]
+stack_name = "dev-renew-automations"
+resolve_s3 = true
+s3_prefix = "dev-renew-automations"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+tags = [
+    "author=zama",
+    "Resources=common-services"
+]
+
+[default.global.parameters]
+region = "us-east-1"
