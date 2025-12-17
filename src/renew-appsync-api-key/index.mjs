@@ -546,21 +546,34 @@ const processAllApis = async (client, expires, config) => {
       forceRenewal: config.forceRenewal,
     });
 
-    // Process each API in parallel
-    await Promise.allSettled(
+    // Process each API in parallel and collect individual results
+    const apiResults = await Promise.allSettled(
       graphqlApis.map(async (api) => {
         const apiId = api.apiId;
         const apiName = api.name;
+
+        // Local results for this API to avoid race conditions
+        const apiResult = {
+          totalKeys: 0,
+          keysEvaluated: 0,
+          keysNeedingRenewal: 0,
+          keysSkipped: 0,
+          keysUpdated: 0,
+          keysFailed: 0,
+          errors: [],
+          processed: false,
+        };
 
         try {
           const apiKeys = await listAllApiKeys(client, apiId, config);
 
           if (apiKeys.length === 0) {
             logger.info("No API keys found for API", { apiId, apiName });
-            return;
+            apiResult.processed = true;
+            return apiResult;
           }
 
-          results.totalKeys += apiKeys.length;
+          apiResult.totalKeys = apiKeys.length;
           logger.info("Processing API keys", {
             apiId,
             apiName,
@@ -572,7 +585,7 @@ const processAllApis = async (client, expires, config) => {
           const renewalDecisions = [];
 
           apiKeys.forEach((key) => {
-            results.keysEvaluated++;
+            apiResult.keysEvaluated++;
             const decision = shouldRenewApiKey(
               key,
               config.renewalThresholdDays,
@@ -585,7 +598,7 @@ const processAllApis = async (client, expires, config) => {
             });
 
             if (decision.needsRenewal) {
-              results.keysNeedingRenewal++;
+              apiResult.keysNeedingRenewal++;
               keysToRenew.push(key);
               logger.info("API key needs renewal", {
                 apiId,
@@ -595,7 +608,7 @@ const processAllApis = async (client, expires, config) => {
                 daysUntilExpiration: decision.daysUntilExpiration,
               });
             } else {
-              results.keysSkipped++;
+              apiResult.keysSkipped++;
               logger.info("API key skipped (no renewal needed)", {
                 apiId,
                 apiName,
@@ -612,8 +625,8 @@ const processAllApis = async (client, expires, config) => {
               apiId,
               apiName,
             });
-            results.apisProcessed++;
-            return;
+            apiResult.processed = true;
+            return apiResult;
           }
 
           const updateResults = await Promise.allSettled(
@@ -626,15 +639,15 @@ const processAllApis = async (client, expires, config) => {
           updateResults.forEach((result, index) => {
             if (result.status === "fulfilled") {
               if (result.value.success) {
-                results.keysUpdated++;
+                apiResult.keysUpdated++;
                 logger.info("API key updated successfully", {
                   apiId,
                   apiName,
                   keyId: result.value.keyId,
                 });
               } else {
-                results.keysFailed++;
-                results.errors.push({
+                apiResult.keysFailed++;
+                apiResult.errors.push({
                   apiId,
                   apiName,
                   keyId: result.value.keyId,
@@ -642,8 +655,8 @@ const processAllApis = async (client, expires, config) => {
                 });
               }
             } else {
-              results.keysFailed++;
-              results.errors.push({
+              apiResult.keysFailed++;
+              apiResult.errors.push({
                 apiId,
                 apiName,
                 keyId: keysToRenew[index]?.id,
@@ -652,17 +665,40 @@ const processAllApis = async (client, expires, config) => {
             }
           });
 
-          results.apisProcessed++;
+          apiResult.processed = true;
+          return apiResult;
         } catch (error) {
           logger.error("Error processing API", error, { apiId, apiName });
-          results.errors.push({
+          apiResult.errors.push({
             apiId,
             apiName,
             error: error.message,
           });
+          return apiResult;
         }
       })
     );
+
+    // Consolidate results safely (no race conditions)
+    apiResults.forEach((apiResult) => {
+      if (apiResult.status === "fulfilled" && apiResult.value) {
+        const apiData = apiResult.value;
+        results.totalKeys += apiData.totalKeys;
+        results.keysEvaluated += apiData.keysEvaluated;
+        results.keysNeedingRenewal += apiData.keysNeedingRenewal;
+        results.keysSkipped += apiData.keysSkipped;
+        results.keysUpdated += apiData.keysUpdated;
+        results.keysFailed += apiData.keysFailed;
+        results.errors.push(...apiData.errors);
+        if (apiData.processed) {
+          results.apisProcessed++;
+        }
+      } else if (apiResult.status === "rejected") {
+        results.errors.push({
+          error: apiResult.reason?.message || "Unknown error processing API",
+        });
+      }
+    });
 
     return results;
   } catch (error) {
