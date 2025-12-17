@@ -6,24 +6,24 @@ import {
 } from "@aws-sdk/client-appsync";
 import { CloudWatchClient, PutMetricDataCommand } from "@aws-sdk/client-cloudwatch";
 
-// Cliente de AppSync reutilizable (caché global para warm starts)
+// Reusable AppSync client (global cache for warm starts)
 let cachedAppSyncClient = null;
 let cachedCloudWatchClient = null;
 
 /**
- * Obtiene o crea el cliente de AppSync (reutilizable entre invocaciones)
+ * Gets or creates the AppSync client (reusable across invocations)
  */
 const getAppSyncClient = () => {
   if (!cachedAppSyncClient) {
     cachedAppSyncClient = new AppSyncClient({
-      maxAttempts: 1, // Controlamos retries manualmente
+      maxAttempts: 1, // We control retries manually
     });
   }
   return cachedAppSyncClient;
 };
 
 /**
- * Obtiene o crea el cliente de CloudWatch (reutilizable entre invocaciones)
+ * Gets or creates the CloudWatch client (reusable across invocations)
  */
 const getCloudWatchClient = () => {
   if (!cachedCloudWatchClient) {
@@ -35,7 +35,7 @@ const getCloudWatchClient = () => {
 };
 
 /**
- * Sanitiza datos para logging (elimina información sensible)
+ * Sanitizes data for logging (removes sensitive information)
  */
 const sanitizeForLogging = (data) => {
   if (!data || typeof data !== "object") {
@@ -57,7 +57,7 @@ const sanitizeForLogging = (data) => {
   return sanitized;
 };
 
-// Configuración de logging estructurado
+// Structured logging configuration
 const logger = {
   info: (message, data = {}) => {
     console.log(JSON.stringify({
@@ -68,7 +68,7 @@ const logger = {
     }));
   },
   error: (message, error = {}, data = {}) => {
-    // No exponer stack traces en producción
+    // Do not expose stack traces in production
     const errorInfo = {
       name: error.name,
       message: error.message,
@@ -95,7 +95,7 @@ const logger = {
 };
 
 /**
- * Publica métricas personalizadas en CloudWatch
+ * Publishes custom metrics to CloudWatch
  */
 const publishMetrics = async (namespace, metrics) => {
   try {
@@ -122,40 +122,40 @@ const publishMetrics = async (namespace, metrics) => {
 
     await client.send(command);
   } catch (error) {
-    // No fallar la función si las métricas fallan
+    // Do not fail the function if metrics fail
     logger.warn("Failed to publish CloudWatch metrics", { error: error.message });
   }
 };
 
 /**
- * Obtiene configuración desde variables de entorno con valores por defecto
+ * Gets configuration from environment variables with default values
  */
 const getConfig = () => {
   const config = {
-    // Configuración de retry
+    // Retry configuration
     maxRetries: parseInt(process.env.MAX_RETRIES || "3", 10),
     retryDelayMs: parseInt(process.env.RETRY_DELAY_MS || "1000", 10),
     
-    // Configuración de expiración
+    // Expiration configuration
     expirationDays: parseInt(process.env.EXPIRATION_DAYS || "365", 10),
     renewalThresholdDays: parseInt(process.env.RENEWAL_THRESHOLD_DAYS || "30", 10),
     
-    // Configuración de paginación
+    // Pagination configuration
     paginationMaxResults: parseInt(process.env.PAGINATION_MAX_RESULTS || "25", 10),
     
-    // Configuración de renovación
+    // Renewal configuration
     forceRenewal: process.env.FORCE_RENEWAL === "true",
     
-    // Configuración de concurrencia
+    // Concurrency configuration
     maxConcurrentApis: parseInt(process.env.MAX_CONCURRENT_APIS || "10", 10),
     maxConcurrentKeys: parseInt(process.env.MAX_CONCURRENT_KEYS || "5", 10),
     
-    // Configuración de métricas
+    // Metrics configuration
     metricsNamespace: process.env.METRICS_NAMESPACE || "AppSyncApiKeyRenewal",
     enableMetrics: process.env.ENABLE_METRICS !== "false",
   };
 
-  // Validar valores mínimos y máximos
+  // Validate minimum and maximum values
   config.maxRetries = Math.max(1, Math.min(10, config.maxRetries));
   config.retryDelayMs = Math.max(100, Math.min(10000, config.retryDelayMs));
   config.paginationMaxResults = Math.max(1, Math.min(100, config.paginationMaxResults));
@@ -166,7 +166,7 @@ const getConfig = () => {
 };
 
 /**
- * Procesa un array en lotes con límite de concurrencia
+ * Processes an array in batches with concurrency limit
  */
 const processInBatches = async (items, batchSize, processor) => {
   const results = [];
@@ -181,16 +181,16 @@ const processInBatches = async (items, batchSize, processor) => {
 };
 
 /**
- * Determina si un error es retryable
+ * Determines if an error is retryable
  */
 const isRetryableError = (error) => {
-  // Errores de servidor (5xx)
+  // Server errors (5xx)
   const httpStatusCode = error.$metadata?.httpStatusCode;
   if (httpStatusCode >= 500 && httpStatusCode < 600) {
     return true;
   }
 
-  // Errores de throttling
+  // Throttling errors
   const retryableCodes = [
     "ThrottlingException",
     "Throttling",
@@ -203,7 +203,7 @@ const isRetryableError = (error) => {
     return true;
   }
 
-  // Errores de red transitorios
+  // Transient network errors
   if (error.name === "NetworkError" || error.name === "TimeoutError") {
     return true;
   }
@@ -212,7 +212,7 @@ const isRetryableError = (error) => {
 };
 
 /**
- * Ejecuta una operación con retry exponencial y jitter
+ * Executes an operation with exponential retry and jitter
  */
 const withRetry = async (operation, operationName, config) => {
   const maxRetries = config.maxRetries;
@@ -229,9 +229,9 @@ const withRetry = async (operation, operationName, config) => {
         throw error;
       }
 
-      // Backoff exponencial con jitter para evitar thundering herd
+      // Exponential backoff with jitter to avoid thundering herd
       const baseDelay = retryDelayMs * Math.pow(2, attempt - 1);
-      const jitter = Math.random() * 0.3 * baseDelay; // 0-30% de jitter
+      const jitter = Math.random() * 0.3 * baseDelay; // 0-30% jitter
       const delay = Math.floor(baseDelay + jitter);
 
       logger.warn(`${operationName} failed, retrying...`, {
@@ -248,7 +248,7 @@ const withRetry = async (operation, operationName, config) => {
 };
 
 /**
- * Calcula la fecha de expiración basada en la configuración
+ * Calculates the expiration date based on configuration
  */
 const calculateExpirationDate = (expirationDays) => {
   if (expirationDays <= 0 || expirationDays > 3650) {
@@ -260,7 +260,7 @@ const calculateExpirationDate = (expirationDays) => {
   expirationDate.setHours(0, 0, 0, 0);
   const expires = Math.floor(expirationDate.getTime() / 1000);
 
-  // Validación: asegurar que la fecha es válida y está en el futuro
+  // Validation: ensure the date is valid and in the future
   if (isNaN(expires) || expires <= Math.floor(Date.now() / 1000)) {
     throw new Error("Invalid expiration date calculated");
   }
@@ -269,14 +269,14 @@ const calculateExpirationDate = (expirationDays) => {
 };
 
 /**
- * Determina si una API key necesita renovación
- * @param {Object} apiKey - Objeto de API key con propiedad expires
- * @param {number} renewalThresholdDays - Días antes de expirar para considerar renovación
- * @param {boolean} forceRenewal - Si es true, renueva todas las keys sin importar su expiración
+ * Determines if an API key needs renewal
+ * @param {Object} apiKey - API key object with expires property
+ * @param {number} renewalThresholdDays - Days before expiration to consider renewal
+ * @param {boolean} forceRenewal - If true, renews all keys regardless of expiration
  * @returns {Object} - { needsRenewal: boolean, daysUntilExpiration: number, reason: string }
  */
 const shouldRenewApiKey = (apiKey, renewalThresholdDays, forceRenewal) => {
-  // Si forceRenewal está activado, renovar todas
+  // If forceRenewal is enabled, renew all
   if (forceRenewal) {
     return {
       needsRenewal: true,
@@ -285,7 +285,7 @@ const shouldRenewApiKey = (apiKey, renewalThresholdDays, forceRenewal) => {
     };
   }
 
-  // Si no tiene fecha de expiración, renovar
+  // If it has no expiration date, renew
   if (!apiKey.expires) {
     return {
       needsRenewal: true,
@@ -294,11 +294,11 @@ const shouldRenewApiKey = (apiKey, renewalThresholdDays, forceRenewal) => {
     };
   }
 
-  // Calcular días hasta expiración
+  // Calculate days until expiration
   const currentTimestamp = Math.floor(Date.now() / 1000);
   const daysUntilExpiration = Math.floor((apiKey.expires - currentTimestamp) / 86400);
 
-  // Si ya expiró, renovar
+  // If already expired, renew
   if (daysUntilExpiration <= 0) {
     return {
       needsRenewal: true,
@@ -307,7 +307,7 @@ const shouldRenewApiKey = (apiKey, renewalThresholdDays, forceRenewal) => {
     };
   }
 
-  // Si está dentro del threshold, renovar
+  // If within threshold, renew
   if (daysUntilExpiration <= renewalThresholdDays) {
     return {
       needsRenewal: true,
@@ -316,7 +316,7 @@ const shouldRenewApiKey = (apiKey, renewalThresholdDays, forceRenewal) => {
     };
   }
 
-  // No necesita renovación
+  // Does not need renewal
   return {
     needsRenewal: false,
     daysUntilExpiration,
@@ -325,13 +325,13 @@ const shouldRenewApiKey = (apiKey, renewalThresholdDays, forceRenewal) => {
 };
 
 /**
- * Lista todas las GraphQL APIs con paginación
+ * Lists all GraphQL APIs with pagination
  */
 const listAllGraphqlApis = async (client, config) => {
   const allApis = [];
   let nextToken = null;
   let pageCount = 0;
-  const maxPages = 1000; // Límite de seguridad
+  const maxPages = 1000; // Safety limit
 
   do {
     try {
@@ -346,7 +346,7 @@ const listAllGraphqlApis = async (client, config) => {
         config
       );
 
-      // Validar respuesta
+      // Validate response
       if (!response || typeof response !== "object") {
         throw new Error("Invalid response from ListGraphqlApis");
       }
@@ -358,7 +358,7 @@ const listAllGraphqlApis = async (client, config) => {
       nextToken = response.nextToken;
       pageCount++;
 
-      // Protección contra loops infinitos
+      // Protection against infinite loops
       if (pageCount >= maxPages) {
         logger.warn("Reached maximum page limit for ListGraphqlApis", { maxPages });
         break;
@@ -374,15 +374,15 @@ const listAllGraphqlApis = async (client, config) => {
 };
 
 /**
- * Lista todas las API keys de una API con paginación
+ * Lists all API keys for an API with pagination
  */
 const listAllApiKeys = async (client, apiId, config) => {
   const allKeys = [];
   let nextToken = null;
   let pageCount = 0;
-  const maxPages = 1000; // Límite de seguridad
+  const maxPages = 1000; // Safety limit
 
-  // Validar apiId
+  // Validate apiId
   if (!apiId || typeof apiId !== "string" || apiId.trim().length === 0) {
     logger.warn("Invalid apiId provided to listAllApiKeys", { apiId });
     return [];
@@ -402,7 +402,7 @@ const listAllApiKeys = async (client, apiId, config) => {
         config
       );
 
-      // Validar respuesta
+      // Validate response
       if (!response || typeof response !== "object") {
         logger.warn("Invalid response from ListApiKeys", { apiId });
         break;
@@ -415,19 +415,19 @@ const listAllApiKeys = async (client, apiId, config) => {
       nextToken = response.nextToken;
       pageCount++;
 
-      // Protección contra loops infinitos
+      // Protection against infinite loops
       if (pageCount >= maxPages) {
         logger.warn("Reached maximum page limit for ListApiKeys", { apiId, maxPages });
         break;
       }
     } catch (error) {
-      // Errores de permisos o API no encontrada no son retryables
+      // Permission errors or API not found are not retryable
       if (error.code === "NotFoundException" || error.code === "UnauthorizedException") {
         logger.warn("API not found or unauthorized", { apiId, errorCode: error.code });
         return [];
       }
       logger.error("Error listing API keys", error, { apiId });
-      // No lanzamos el error aquí para continuar con otras APIs
+      // We don't throw the error here to continue with other APIs
       return [];
     }
   } while (nextToken);
@@ -436,10 +436,10 @@ const listAllApiKeys = async (client, apiId, config) => {
 };
 
 /**
- * Actualiza una API key individual
+ * Updates an individual API key
  */
 const updateApiKey = async (client, apiId, keyId, expires, config) => {
-  // Validar parámetros
+  // Validate parameters
   if (!apiId || typeof apiId !== "string" || apiId.trim().length === 0) {
     return { success: false, keyId, apiId, error: "Invalid apiId" };
   }
@@ -465,7 +465,7 @@ const updateApiKey = async (client, apiId, keyId, expires, config) => {
       config
     );
 
-    // Validar respuesta
+    // Validate response
     if (!result || typeof result !== "object") {
       throw new Error("Invalid response from UpdateApiKey");
     }
@@ -474,7 +474,7 @@ const updateApiKey = async (client, apiId, keyId, expires, config) => {
       throw new Error("UpdateApiKey returned no apiKey in response");
     }
 
-    // Validar que la fecha de expiración se actualizó correctamente
+    // Validate that the expiration date was updated correctly
     if (result.apiKey.expires && result.apiKey.expires !== expires) {
       logger.warn("Expiration date mismatch after update", {
         apiId,
@@ -486,7 +486,7 @@ const updateApiKey = async (client, apiId, keyId, expires, config) => {
 
     return { success: true, keyId, apiId, expires: result.apiKey.expires };
   } catch (error) {
-    // Errores específicos que no deben ser retryables
+    // Specific errors that should not be retryable
     const nonRetryableErrors = [
       "NotFoundException",
       "UnauthorizedException",
@@ -515,7 +515,7 @@ const updateApiKey = async (client, apiId, keyId, expires, config) => {
 };
 
 /**
- * Procesa todas las APIs y sus keys
+ * Processes all APIs and their keys
  */
 const processAllApis = async (client, expires, config) => {
   const results = {
@@ -546,7 +546,7 @@ const processAllApis = async (client, expires, config) => {
       forceRenewal: config.forceRenewal,
     });
 
-    // Procesar cada API en paralelo
+    // Process each API in parallel
     await Promise.allSettled(
       graphqlApis.map(async (api) => {
         const apiId = api.apiId;
@@ -567,7 +567,7 @@ const processAllApis = async (client, expires, config) => {
             keyCount: apiKeys.length,
           });
 
-          // Filtrar keys que necesitan renovación
+          // Filter keys that need renewal
           const keysToRenew = [];
           const renewalDecisions = [];
 
@@ -606,7 +606,7 @@ const processAllApis = async (client, expires, config) => {
             }
           });
 
-          // Actualizar solo las keys que necesitan renovación
+          // Update only the keys that need renewal
           if (keysToRenew.length === 0) {
             logger.info("No API keys need renewal for this API", {
               apiId,
@@ -622,7 +622,7 @@ const processAllApis = async (client, expires, config) => {
             )
           );
 
-          // Procesar resultados
+          // Process results
           updateResults.forEach((result, index) => {
             if (result.status === "fulfilled") {
               if (result.value.success) {
@@ -672,7 +672,7 @@ const processAllApis = async (client, expires, config) => {
 };
 
 /**
- * Handler principal de Lambda
+ * Main Lambda handler
  */
 export const handler = async (event) => {
   const startTime = Date.now();
@@ -691,7 +691,7 @@ export const handler = async (event) => {
   });
 
   try {
-    // Validar configuración
+    // Validate configuration
     if (config.expirationDays <= 0 || config.expirationDays > 3650) {
       throw new Error(`Invalid EXPIRATION_DAYS: ${config.expirationDays}. Must be between 1 and 3650`);
     }
@@ -700,10 +700,10 @@ export const handler = async (event) => {
       throw new Error(`Invalid RENEWAL_THRESHOLD_DAYS: ${config.renewalThresholdDays}. Must be between 0 and 365`);
     }
 
-    // Inicializar cliente de AppSync
-    const client = new AppSyncClient({});
+    // Initialize AppSync client
+    const client = getAppSyncClient();
 
-    // Calcular fecha de expiración
+    // Calculate expiration date
     const expires = calculateExpirationDate(config.expirationDays);
     logger.info("Expiration date calculated", {
       expires: expires.expires,
@@ -711,12 +711,12 @@ export const handler = async (event) => {
       expirationDays: config.expirationDays,
     });
 
-    // Procesar todas las APIs
+    // Process all APIs
     const results = await processAllApis(client, expires, config);
 
     const duration = Date.now() - startTime;
     const response = {
-      statusCode: results.keysFailed > 0 ? 207 : 200, // 207 Multi-Status si hay errores parciales
+      statusCode: results.keysFailed > 0 ? 207 : 200, // 207 Multi-Status if there are partial errors
       body: JSON.stringify({
         success: results.keysFailed === 0,
         message: `Processed ${results.apisProcessed}/${results.totalApis} APIs. Evaluated ${results.keysEvaluated} keys. Updated ${results.keysUpdated}/${results.keysNeedingRenewal} keys that needed renewal. Skipped ${results.keysSkipped} keys.`,

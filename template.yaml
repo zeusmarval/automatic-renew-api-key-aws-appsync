@@ -17,14 +17,14 @@ Resources:
       Environment:
         Variables:
           # Retry configuration
-          MAX_RETRIES: "3"
-          RETRY_DELAY_MS: "1000"
+          MAX_RETRIES: 3
+          RETRY_DELAY_MS: 1000
           # Expiration configuration (days)
-          EXPIRATION_DAYS: "365"
+          EXPIRATION_DAYS: 365
           # Renewal threshold: renew keys that expire in X days or less
-          RENEWAL_THRESHOLD_DAYS: "30"
+          RENEWAL_THRESHOLD_DAYS: 30
           # Pagination configuration
-          PAGINATION_MAX_RESULTS: "25"
+          PAGINATION_MAX_RESULTS: 25
           # Force renewal of all keys regardless of expiration (true/false)
           FORCE_RENEWAL: "false"
       Policies:
