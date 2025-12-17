@@ -1,17 +1,32 @@
 AWSTemplateFormatVersion: 2010-09-09
 Transform: "AWS::Serverless-2016-10-31"
-Description: Automatically renew AppSync API key
+Description: COMMON SERVICES - RENEW APPSYNC API KEY | Automatically renew AppSync API key
 
 Resources:
 
-  RenewApiKeyAppSync:
+  RenewAppSyncApiKeyFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Description: Lambda in charge of renewing the API KEY of all AppSync.
-      Runtime: nodejs20.x
+      FunctionName: !Sub ${AWS::StackName}-appsync-api-key
+      Description: COMMON SERVICES - RENEW APPSYNC API KEY | Lambda function to automatically renew API keys for all AppSync GraphQL APIs
+      Runtime: nodejs22.x
       Handler: index.handler
-      CodeUri: handlers
+      CodeUri: src/renew-appsync-api-key
       Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          # Retry configuration
+          MAX_RETRIES: 3
+          RETRY_DELAY_MS: 1000
+          # Expiration configuration (days)
+          EXPIRATION_DAYS: 365
+          # Renewal threshold: renew keys that expire in X days or less
+          RENEWAL_THRESHOLD_DAYS: 30
+          # Pagination configuration
+          PAGINATION_MAX_RESULTS: 25
+          # Force renewal of all keys regardless of expiration (true/false)
+          FORCE_RENEWAL: "false"
       Policies:
         - Statement:
             - Effect: Allow
@@ -26,4 +41,9 @@ Resources:
           Type: Schedule
           Properties:
             Schedule: "rate(300 days)"
-      
+
+  RenewAppSyncApiKeyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${RenewAppSyncApiKeyFunction}
+      RetentionInDays: 30
