@@ -36,25 +36,82 @@ const getCloudWatchClient = () => {
 
 /**
  * Sanitizes data for logging (removes sensitive information)
+ * Only redacts string values that match sensitive patterns, not numeric counters
  */
-const sanitizeForLogging = (data) => {
+const sanitizeForLogging = (data, enableSanitization = true) => {
+  if (!enableSanitization) {
+    return data;
+  }
+
   if (!data || typeof data !== "object") {
     return data;
   }
 
-  const sensitiveKeys = ["apiKey", "key", "token", "secret", "password", "authorization"];
+  // Fields that should never be redacted (counters, statistics, IDs)
+  const allowedFields = [
+    "keysEvaluated",
+    "keysNeedingRenewal",
+    "keysSkipped",
+    "keysUpdated",
+    "keysFailed",
+    "totalKeys",
+    "totalApis",
+    "apisProcessed",
+    "keyId",
+    "apiId",
+    "messageId",
+    "statusCode",
+    "durationMs",
+    "expirationDays",
+    "renewalThresholdDays",
+    "maxRetries",
+    "retryDelayMs",
+    "paginationMaxResults",
+  ];
+
+  // Sensitive patterns that should trigger redaction (only for string values)
+  const sensitivePatterns = [
+    /^apiKey$/i,
+    /^key$/i,
+    /token/i,
+    /secret/i,
+    /password/i,
+    /authorization/i,
+    /credential/i,
+    /auth/i,
+  ];
+
   const sanitized = { ...data };
 
   for (const key in sanitized) {
     const lowerKey = key.toLowerCase();
-    if (sensitiveKeys.some((sk) => lowerKey.includes(sk))) {
+    
+    // Skip if field is in allowed list
+    if (allowedFields.some((af) => lowerKey === af.toLowerCase())) {
+      continue;
+    }
+
+    // Only redact string values that match sensitive patterns
+    if (typeof sanitized[key] === "string" && sensitivePatterns.some((pattern) => pattern.test(key))) {
       sanitized[key] = "[REDACTED]";
-    } else if (typeof sanitized[key] === "object" && sanitized[key] !== null) {
-      sanitized[key] = sanitizeForLogging(sanitized[key]);
+    } else if (typeof sanitized[key] === "object" && sanitized[key] !== null && !Array.isArray(sanitized[key])) {
+      sanitized[key] = sanitizeForLogging(sanitized[key], enableSanitization);
     }
   }
 
   return sanitized;
+};
+
+/**
+ * Gets sanitization setting from config (defaults to true for security)
+ */
+let globalSanitizationEnabled = true;
+
+/**
+ * Sets the global sanitization setting
+ */
+const setSanitizationEnabled = (enabled) => {
+  globalSanitizationEnabled = enabled;
 };
 
 // Structured logging configuration
@@ -63,7 +120,7 @@ const logger = {
     console.log(JSON.stringify({
       level: "INFO",
       message,
-      ...sanitizeForLogging(data),
+      ...sanitizeForLogging(data, globalSanitizationEnabled),
       timestamp: new Date().toISOString(),
     }));
   },
@@ -80,7 +137,7 @@ const logger = {
       level: "ERROR",
       message,
       error: errorInfo,
-      ...sanitizeForLogging(data),
+      ...sanitizeForLogging(data, globalSanitizationEnabled),
       timestamp: new Date().toISOString(),
     }));
   },
@@ -88,7 +145,7 @@ const logger = {
     console.warn(JSON.stringify({
       level: "WARN",
       message,
-      ...sanitizeForLogging(data),
+      ...sanitizeForLogging(data, globalSanitizationEnabled),
       timestamp: new Date().toISOString(),
     }));
   },
@@ -153,6 +210,9 @@ const getConfig = () => {
     // Metrics configuration
     metricsNamespace: process.env.METRICS_NAMESPACE || "AppSyncApiKeyRenewal",
     enableMetrics: process.env.ENABLE_METRICS !== "false",
+    
+    // Logging configuration
+    enableSanitization: process.env.ENABLE_SANITIZATION !== "false", // Default: true for security
   };
 
   // Validate minimum and maximum values
@@ -713,6 +773,9 @@ const processAllApis = async (client, expires, config) => {
 export const handler = async (event) => {
   const startTime = Date.now();
   const config = getConfig();
+  
+  // Set global sanitization setting
+  setSanitizationEnabled(config.enableSanitization);
   
   logger.info("Lambda function started", {
     event,

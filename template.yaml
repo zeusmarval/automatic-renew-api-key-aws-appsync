@@ -27,6 +27,8 @@ Resources:
           PAGINATION_MAX_RESULTS: 25
           # Force renewal of all keys regardless of expiration (true/false)
           FORCE_RENEWAL: "false"
+          # Enable sanitization of sensitive data in logs (true/false, default: true)
+          ENABLE_SANITIZATION: "true"
       Policies:
         - Statement:
             - Effect: Allow
